@@ -1,0 +1,15 @@
+.claude/
+.remember/
+.pytest_cache/
+.py_test_cache/
+
+data/
+docs/
+outputs/
+
+__pycache__/
+*.py[cod]
+
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
