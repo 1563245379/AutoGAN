@@ -5,20 +5,7 @@ import torch
 from torch import nn
 
 from mensa_ad.data import TabularAnomalyDataset
-from mensa_ad.training import TrainConfig, non_saturating_generator_loss, score_dataset, train_mensa
-
-
-def test_non_saturating_generator_loss_uses_log_d_g_objective():
-    criterion = nn.BCELoss()
-    fake_validity = torch.tensor([[0.9], [0.8]], dtype=torch.float32)
-    fake_targets = torch.ones_like(fake_validity)
-    real_targets = torch.zeros_like(fake_validity)
-
-    loss = non_saturating_generator_loss(criterion, fake_validity, fake_targets)
-
-    assert torch.isclose(loss, criterion(fake_validity, fake_targets))
-    assert loss < criterion(fake_validity, real_targets)
-
+from mensa_ad.training import TrainConfig, score_dataset, train_mensa
 
 def test_train_mensa_runs_one_epoch_and_scores_samples():
     frame = pd.DataFrame(

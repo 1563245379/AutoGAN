@@ -64,14 +64,6 @@ def noise_uniform(batch_size: int, noise_dim: int, device: torch.device) -> torc
     return torch.empty(batch_size, noise_dim, device=device).uniform_(-1.0, 1.0)
 
 
-def non_saturating_generator_loss(
-    criterion: nn.Module,
-    fake_validity: torch.Tensor,
-    fake_targets: torch.Tensor,
-) -> torch.Tensor:
-    return criterion(fake_validity, fake_targets)
-
-
 def validate_config(config: TrainConfig, *, training: bool) -> None:
     if config.batch_size < 1:
         raise ValueError("batch_size must be at least 1")
@@ -142,7 +134,7 @@ def train_mensa(
             generator_optimizer.zero_grad(set_to_none=True)
             fake = generator(noise_uniform(batch_size, config.noise_dim, device))
             fake_validity, _ = discriminator(fake)
-            adversarial_loss = non_saturating_generator_loss(criterion, fake_validity, fake_targets)
+            adversarial_loss = criterion(fake_validity, real_targets)
             reconstruction_loss = F.mse_loss(fake, real)
             g_loss = adversarial_loss + config.reconstruction_weight * reconstruction_loss
             g_loss.backward()
