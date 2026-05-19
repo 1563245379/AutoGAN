@@ -59,9 +59,10 @@ class GeneratorDecoder(nn.Module):
         self.noise_dim = noise_dim
         self.output_dim = output_dim
         self.network = nn.Sequential(
-            DenseBlock(noise_dim, 128, activation="leaky_relu", dropout=dropout, batch_norm=False),
+            DenseBlock(noise_dim, 128, activation="leaky_relu", dropout=dropout, batch_norm=True),
             DenseBlock(128, 256, activation="leaky_relu", dropout=dropout, batch_norm=True),
-            DenseBlock(256, 512, activation="relu", dropout=dropout, batch_norm=True),
+            DenseBlock(256, 512, activation="leaky_relu", dropout=dropout, batch_norm=True),
+            DenseBlock(512, 512, activation="relu", dropout=dropout, batch_norm=True),
             nn.Linear(512, output_dim),
             nn.Tanh(),
         )
@@ -83,7 +84,7 @@ class DiscriminatorEncoder(nn.Module):
         self.input_dim = input_dim
         self.latent_dim = latent_dim
         self.encoder = nn.Sequential(
-            DenseBlock(input_dim, 600, activation="leaky_relu", dropout=dropout, batch_norm=False),
+            DenseBlock(input_dim, 600, activation="leaky_relu", dropout=dropout, batch_norm=True),
             DenseBlock(600, 256, activation="leaky_relu", dropout=dropout, batch_norm=True),
             DenseBlock(256, latent_dim, activation="relu", dropout=dropout, batch_norm=True),
         )
