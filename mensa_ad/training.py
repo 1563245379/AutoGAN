@@ -131,8 +131,7 @@ def train_mensa(
             generator_optimizer.zero_grad(set_to_none=True)
             fake = generator(noise_uniform(batch_size, config.noise_dim, device))
             fake_validity, _ = discriminator(fake)
-            adversarial_loss = criterion(fake_validity, real_targets)
-            g_loss = adversarial_loss 
+            g_loss = criterion(fake_validity, real_targets)
             g_loss.backward()
             generator_optimizer.step()
 
@@ -181,9 +180,8 @@ def score_dataset(
         for _ in range(config.score_samples):
             fake = generator(noise_uniform(real.shape[0], config.noise_dim, device))
             _, fake_latent = discriminator(fake)
-            adversarial = torch.mean((real_latent - fake_latent) ** 2, dim=1)
-            combined = adversarial
-            sample_scores.append(combined)
+            adversarial = torch.norm(real_latent - fake_latent, p=2, dim=1)
+            sample_scores.append(adversarial)
         stacked = torch.stack(sample_scores, dim=0)
         batch_scores = torch.min(stacked, dim=0).values
         all_scores.append(batch_scores.detach().cpu().numpy())

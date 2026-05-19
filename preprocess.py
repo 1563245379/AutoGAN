@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 
@@ -9,86 +10,71 @@ TRAIN_LABEL_PATH = "data/train_label.csv"
 TEST_LABEL_PATH = "data/test_label.csv"
 
 deleted_cols = [
-    'site_id',
-    'building_id',
-    'air_temperature_mean_lag7',
-    'air_temperature_max_lag7',
-    'air_temperature_min_lag7',
-    'air_temperature_std_lag7',
-    'air_temperature_mean_lag73',
-    'air_temperature_max_lag73',
-    'air_temperature_min_lag73',
-    'air_temperature_std_lag73',
-    'hour',
-    'weekday',
-    'month',
-    'year',
-    'hour_x',
-    'hour_y',
-    'month_x',
-    'month_y',
-    'weekday_x',
-    'weekday_y',
-    'gte_hour',
-    'gte_weekday',
-    'gte_month',
-    'gte_building_id',
-    'gte_primary_use',
-    'gte_site_id',
-    'gte_meter',
     'gte_meter_hour',
     'gte_meter_weekday',
-    'gte_meter_month',
     'gte_meter_building_id',
     'gte_meter_primary_use',
     'gte_meter_site_id',
     'gte_meter_building_id_hour',
     'gte_meter_building_id_weekday',
     'gte_meter_building_id_month',
+    'air_temperature_mean_lag73',
+    'air_temperature_max_lag73',
+    'air_temperature_min_lag73',
+    'air_temperature_mean_lag7',
+    'air_temperature_max_lag7',
+    'air_temperature_min_lag7',
+    'gte_meter'
 ]
 
 df = pd.read_csv(INPUT_PATH)
 print(f"Original: {df.shape}")
 
-df = df.dropna()
+df['timestamp'] = pd.to_datetime(df['timestamp'])
 
-building_id_ref = df['building_id'].copy()
-timestamp_ref = pd.to_datetime(df['timestamp'])
+ints = []
+for col in df.columns:
+    if df[col].dtype == int:
+        ints.append(col)
+
+df = df.drop(columns=ints[9:], axis=1)
 
 object_cols = df.select_dtypes(include="object").columns.tolist()
-df = df.drop(columns=object_cols)
+df = df.drop(columns=object_cols, axis=1)
+df = df.drop(columns=deleted_cols, axis=1)
 
-df = df.drop(columns=deleted_cols)
+df['meter_reading'] = df.groupby('building_id')['meter_reading'].transform(lambda x: x.fillna(x.mean()))
 
-df = df.reset_index(drop=True)
+df['date'] = df['timestamp'].dt.date
+df['meterReadings_daily_std'] = df.groupby(['building_id', 'date'])['meter_reading'].transform(lambda x: x.std(ddof=0))
+
+df = df.sort_values(['building_id', 'timestamp']).reset_index(drop=True)
 df.insert(0, 'id', df.index)
+
+shifts = [1, 6, 12, 24, 2*24, 3*24, 4*24, 7*24]
+for s in shifts:
+    df[f'lag_value_{s}'] = np.nan
+    df[f'lag_value_{-s}'] = np.nan
+    for bid, idx in df.groupby('building_id').groups.items():
+        group = df.loc[idx].set_index('timestamp').sort_index()
+        full_range = pd.date_range(group.index.min(), group.index.max(), freq='h')
+        mean_val = group['meter_reading'].mean()
+        reading = group['meter_reading'].reindex(full_range).fillna(mean_val)
+
+        for s in shifts:
+            df.loc[idx, f'lag_value_{s}'] = reading.shift(s).reindex(group.index).fillna(mean_val).values
+            df.loc[idx, f'lag_value_{-s}'] = reading.shift(-s).reindex(group.index).fillna(mean_val).values
+
+for col in df.columns:
+    k = df[col].isnull().sum()
+    if k > 0:
+        print(f'{col} : {k}')
+
+df = df.drop(columns=['timestamp', 'date'])
 
 feature_cols = [c for c in df.columns if c not in ('id', 'anomaly')]
 scaler = MinMaxScaler(feature_range=(-1, 1))
 df[feature_cols] = scaler.fit_transform(df[feature_cols])
-
-df['building_id'] = building_id_ref.values
-df['timestamp'] = timestamp_ref.values
-df = df.sort_values(['building_id', 'timestamp']).reset_index(drop=True)
-
-df['date'] = df['timestamp'].dt.date
-df['meterReadings_daily_std'] = df.groupby(['building_id', 'date'])['meter_reading'].transform('std')
-
-df_indexed = df.set_index('timestamp')
-df['air_temperature_std_lag7'] = (
-    df_indexed.groupby('building_id')['air_temperature']
-    .rolling('7D').std()
-    .reset_index(level=0, drop=True)
-    .values
-)
-df['air_temperature_std_lag73'] = (
-    df_indexed.groupby('building_id')['air_temperature']
-    .rolling('73D').std()
-    .reset_index(level=0, drop=True)
-    .values
-)
-
-df = df.drop(columns=['building_id', 'timestamp', 'date'])
 
 train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
 train_df = pd.DataFrame(train_df)
