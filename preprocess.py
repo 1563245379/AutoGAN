@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 INPUT_PATH = "data/raw_data.csv"
 TRAIN_PATH = "data/train.csv"
@@ -37,11 +37,11 @@ for col in df.columns:
     if df[col].dtype == int:
         ints.append(col)
 
-df = df.drop(columns=ints[9:], axis=1)
+df = df.drop(columns=ints[9:])
 
 object_cols = df.select_dtypes(include="object").columns.tolist()
-df = df.drop(columns=object_cols, axis=1)
-df = df.drop(columns=deleted_cols, axis=1)
+df = df.drop(columns=object_cols)
+df = df.drop(columns=deleted_cols)
 
 df['meter_reading'] = df.groupby('building_id')['meter_reading'].transform(lambda x: x.fillna(x.mean()))
 
@@ -73,8 +73,10 @@ for col in df.columns:
 df = df.drop(columns=['timestamp', 'date'])
 
 feature_cols = [c for c in df.columns if c not in ('id', 'anomaly')]
-scaler = MinMaxScaler(feature_range=(-1, 1))
-df[feature_cols] = scaler.fit_transform(df[feature_cols])
+standard_scaler = StandardScaler()
+df[feature_cols] = standard_scaler.fit_transform(df[feature_cols])
+minmax_scaler = MinMaxScaler(feature_range=(-1, 1))
+df[feature_cols] = minmax_scaler.fit_transform(df[feature_cols])
 
 train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
 train_df = pd.DataFrame(train_df)

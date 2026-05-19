@@ -3,3 +3,4 @@ pandas
 numpy
 pytest
 tqdm
+scikit-learn

@@ -12,22 +12,6 @@ def _activation(name: str) -> nn.Module:
     raise ValueError(f"unsupported activation: {name}")
 
 
-class SafeBatchNorm1d(nn.BatchNorm1d):
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        if self.training and input.size(0) == 1:
-            return torch.nn.functional.batch_norm(
-                input,
-                self.running_mean,
-                self.running_var,
-                self.weight,
-                self.bias,
-                training=False,
-                momentum=0.0,
-                eps=self.eps,
-            )
-        return super().forward(input)
-
-
 class DenseBlock(nn.Sequential):
     def __init__(
         self,
@@ -35,11 +19,11 @@ class DenseBlock(nn.Sequential):
         output_dim: int,
         activation: str = "leaky_relu",
         dropout: float = 0.2,
-        batch_norm: bool = True,
+        normalize: bool = True,
     ) -> None:
         layers: list[nn.Module] = [nn.Linear(input_dim, output_dim)]
-        if batch_norm:
-            layers.append(SafeBatchNorm1d(output_dim))
+        if normalize:
+            layers.append(nn.LayerNorm(output_dim))
         layers.append(_activation(activation))
         if dropout > 0.0:
             layers.append(nn.Dropout(dropout))
@@ -59,10 +43,10 @@ class GeneratorDecoder(nn.Module):
         self.noise_dim = noise_dim
         self.output_dim = output_dim
         self.network = nn.Sequential(
-            DenseBlock(noise_dim, 128, activation="leaky_relu", dropout=dropout, batch_norm=True),
-            DenseBlock(128, 256, activation="leaky_relu", dropout=dropout, batch_norm=True),
-            DenseBlock(256, 512, activation="leaky_relu", dropout=dropout, batch_norm=True),
-            DenseBlock(512, 512, activation="relu", dropout=dropout, batch_norm=True),
+            DenseBlock(noise_dim, 128, activation="leaky_relu", dropout=dropout, normalize=True),
+            DenseBlock(128, 256, activation="leaky_relu", dropout=dropout, normalize=True),
+            DenseBlock(256, 512, activation="leaky_relu", dropout=dropout, normalize=True),
+            DenseBlock(512, 512, activation="relu", dropout=dropout, normalize=True),
             nn.Linear(512, output_dim),
             nn.Tanh(),
         )
@@ -84,14 +68,11 @@ class DiscriminatorEncoder(nn.Module):
         self.input_dim = input_dim
         self.latent_dim = latent_dim
         self.encoder = nn.Sequential(
-            DenseBlock(input_dim, 600, activation="leaky_relu", dropout=dropout, batch_norm=True),
-            DenseBlock(600, 256, activation="leaky_relu", dropout=dropout, batch_norm=True),
-            DenseBlock(256, latent_dim, activation="relu", dropout=dropout, batch_norm=True),
+            DenseBlock(input_dim, 600, activation="leaky_relu", dropout=dropout, normalize=True),
+            DenseBlock(600, 256, activation="leaky_relu", dropout=dropout, normalize=True),
+            DenseBlock(256, latent_dim, activation="relu", dropout=dropout, normalize=True),
         )
-        self.validity = nn.Sequential(
-            nn.Linear(latent_dim, 1),
-            nn.Sigmoid(),
-        )
+        self.validity = nn.Linear(latent_dim, 1)
 
     def encode(self, samples: torch.Tensor) -> torch.Tensor:
         return self.encoder(samples)

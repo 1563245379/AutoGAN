@@ -22,7 +22,6 @@ class TrainConfig:
     epochs: int = 50
     lr: float = 0.0002
     dropout: float = 0.2
-    reconstruction_weight: float = 0.1
     score_samples: int = 4
     val_score_interval: int = 0
     device: str = "auto"
@@ -70,8 +69,6 @@ def validate_config(config: TrainConfig, *, training: bool) -> None:
         raise ValueError("epochs must be at least 1")
     if config.score_samples < 1:
         raise ValueError("score_samples must be at least 1")
-    if config.reconstruction_weight < 0.0:
-        raise ValueError("reconstruction_weight must be non-negative")
     if config.val_score_interval < 0:
         raise ValueError("val_score_interval must be non-negative")
 
@@ -99,7 +96,7 @@ def train_mensa(
         dropout=config.dropout,
     ).to(device)
 
-    criterion = nn.BCELoss()
+    criterion = nn.BCEWithLogitsLoss()
     generator_optimizer = torch.optim.Adam(generator.parameters(), lr=config.lr)
     discriminator_optimizer = torch.optim.Adam(discriminator.parameters(), lr=config.lr)
     train_loader = _loader(train_dataset, config.batch_size, shuffle=True, drop_last=False)
@@ -115,23 +112,23 @@ def train_mensa(
         for real, _, _ in train_loader:
             real = real.to(device=device, dtype=torch.float32)
             batch_size = real.shape[0]
-            real_targets = torch.zeros(batch_size, 1, device=device)
-            fake_targets = torch.ones(batch_size, 1, device=device)
+            real_targets = torch.full((batch_size, 1), 0.1, device=device)
+            fake_targets = torch.full((batch_size, 1), 0.9, device=device)
+            g_targets = torch.zeros(batch_size, 1, device=device)
 
             discriminator_optimizer.zero_grad(set_to_none=True)
             fake = generator(noise_uniform(batch_size, config.noise_dim, device)).detach()
-            real_validity, _ = discriminator(real)
-            fake_validity, _ = discriminator(fake)
-            d_real_loss = criterion(real_validity, real_targets)
-            d_fake_loss = criterion(fake_validity, fake_targets)
-            d_loss = 0.5 * (d_real_loss + d_fake_loss)
+            combined = torch.cat([real, fake], dim=0)
+            combined_targets = torch.cat([real_targets, fake_targets], dim=0)
+            validity, _ = discriminator(combined)
+            d_loss = criterion(validity, combined_targets)
             d_loss.backward()
             discriminator_optimizer.step()
 
             generator_optimizer.zero_grad(set_to_none=True)
             fake = generator(noise_uniform(batch_size, config.noise_dim, device))
             fake_validity, _ = discriminator(fake)
-            g_loss = criterion(fake_validity, real_targets)
+            g_loss = criterion(fake_validity, g_targets)
             g_loss.backward()
             generator_optimizer.step()
 
