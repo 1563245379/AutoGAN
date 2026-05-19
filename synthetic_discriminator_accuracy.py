@@ -52,9 +52,9 @@ class _LegacyGeneratorDecoder(nn.Module):
     def __init__(self, noise_dim: int, output_dim: int, dropout: float) -> None:
         super().__init__()
         self.network = nn.Sequential(
-            DenseBlock(noise_dim, 128, activation="leaky_relu", dropout=dropout, batch_norm=False),
-            DenseBlock(128, 256, activation="leaky_relu", dropout=dropout, batch_norm=True),
-            DenseBlock(256, 512, activation="leaky_relu", dropout=dropout, batch_norm=True),
+            DenseBlock(noise_dim, 128, activation="leaky_relu", dropout=dropout, normalize=False),
+            DenseBlock(128, 256, activation="leaky_relu", dropout=dropout, normalize=True),
+            DenseBlock(256, 512, activation="leaky_relu", dropout=dropout, normalize=True),
             nn.Linear(512, output_dim),
             nn.Tanh(),
         )
@@ -67,9 +67,9 @@ class _LegacyDiscriminatorEncoder(nn.Module):
     def __init__(self, input_dim: int, latent_dim: int, dropout: float) -> None:
         super().__init__()
         self.encoder = nn.Sequential(
-            DenseBlock(input_dim, 600, activation="leaky_relu", dropout=dropout, batch_norm=False),
-            DenseBlock(600, 256, activation="leaky_relu", dropout=dropout, batch_norm=True),
-            DenseBlock(256, latent_dim, activation="relu", dropout=dropout, batch_norm=True),
+            DenseBlock(input_dim, 600, activation="leaky_relu", dropout=dropout, normalize=False),
+            DenseBlock(600, 256, activation="leaky_relu", dropout=dropout, normalize=True),
+            DenseBlock(256, latent_dim, activation="relu", dropout=dropout, normalize=True),
         )
         self.validity = nn.Sequential(nn.Linear(latent_dim, 1), nn.Sigmoid())
 
@@ -238,14 +238,19 @@ def _evaluate_discriminator(
     discriminator: nn.Module,
     loader: DataLoader,
     device: torch.device,
+    architecture: str,
 ) -> tuple[np.ndarray, np.ndarray]:
     discriminator.eval()
     score_batches: list[np.ndarray] = []
     label_batches: list[np.ndarray] = []
     for features, labels in loader:
         features = features.to(device=device, dtype=torch.float32)
-        scores, _ = discriminator(features)
-        score_batches.append(scores.detach().cpu().numpy().reshape(-1))
+        raw, _ = discriminator(features)
+        if architecture == "current":
+            probability = torch.sigmoid(raw)
+        else:
+            probability = raw
+        score_batches.append(probability.detach().cpu().numpy().reshape(-1))
         label_batches.append(labels.detach().cpu().numpy().reshape(-1).astype(np.int64))
     return np.concatenate(score_batches), np.concatenate(label_batches)
 
@@ -315,7 +320,7 @@ def run_synthetic_discriminator_experiment(config: SyntheticConfig) -> dict:
         device=device,
     )
     loader = _loader(features, labels, config.batch_size)
-    scores, labels = _evaluate_discriminator(loaded.discriminator, loader, device)
+    scores, labels = _evaluate_discriminator(loaded.discriminator, loader, device, loaded.architecture)
     test_counts = confusion_counts(scores, labels, threshold=0.5)
     test_metrics = compute_binary_metrics(test_counts)
     if config.samples_out:
