@@ -39,7 +39,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="auto")
     parser.add_argument("--score-samples", type=int, default=4)
-    parser.add_argument("--score-alpha", type=float, default=0.7)
     parser.add_argument("--threshold-steps", type=int, default=1001)
     parser.add_argument("--input-dim", type=int, default=None)
     parser.add_argument(
@@ -141,7 +140,6 @@ def run_train(args: argparse.Namespace) -> dict:
         epochs=args.epochs,
         lr=args.lr,
         score_samples=args.score_samples,
-        score_alpha=args.score_alpha,
         device=args.device,
         seed=args.seed,
         val_score_interval=args.val_score_interval,

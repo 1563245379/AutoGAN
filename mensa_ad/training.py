@@ -23,7 +23,6 @@ class TrainConfig:
     lr: float = 0.0002
     dropout: float = 0.2
     reconstruction_weight: float = 0.1
-    score_alpha: float = 0.7
     score_samples: int = 4
     val_score_interval: int = 0
     device: str = "auto"
@@ -71,8 +70,6 @@ def validate_config(config: TrainConfig, *, training: bool) -> None:
         raise ValueError("epochs must be at least 1")
     if config.score_samples < 1:
         raise ValueError("score_samples must be at least 1")
-    if not 0.0 <= config.score_alpha <= 1.0:
-        raise ValueError("score_alpha must be between 0.0 and 1.0")
     if config.reconstruction_weight < 0.0:
         raise ValueError("reconstruction_weight must be non-negative")
     if config.val_score_interval < 0:
@@ -135,8 +132,7 @@ def train_mensa(
             fake = generator(noise_uniform(batch_size, config.noise_dim, device))
             fake_validity, _ = discriminator(fake)
             adversarial_loss = criterion(fake_validity, real_targets)
-            reconstruction_loss = F.mse_loss(fake, real)
-            g_loss = adversarial_loss + config.reconstruction_weight * reconstruction_loss
+            g_loss = adversarial_loss 
             g_loss.backward()
             generator_optimizer.step()
 
@@ -185,9 +181,8 @@ def score_dataset(
         for _ in range(config.score_samples):
             fake = generator(noise_uniform(real.shape[0], config.noise_dim, device))
             _, fake_latent = discriminator(fake)
-            adversarial = torch.mean(torch.abs(real_latent - fake_latent), dim=1)
-            reconstruction = torch.mean(torch.abs(real - fake), dim=1)
-            combined = config.score_alpha * adversarial + (1.0 - config.score_alpha) * reconstruction
+            adversarial = torch.mean((real_latent - fake_latent) ** 2, dim=1)
+            combined = adversarial
             sample_scores.append(combined)
         stacked = torch.stack(sample_scores, dim=0)
         batch_scores = torch.min(stacked, dim=0).values

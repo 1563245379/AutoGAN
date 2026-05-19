@@ -7,6 +7,45 @@ from torch import nn
 from mensa_ad.data import TabularAnomalyDataset
 from mensa_ad.training import TrainConfig, score_dataset, train_mensa
 
+
+class _ZeroGenerator(nn.Module):
+    def __init__(self, output_dim: int) -> None:
+        super().__init__()
+        self.output_dim = output_dim
+
+    def forward(self, noise: torch.Tensor) -> torch.Tensor:
+        return torch.zeros(noise.shape[0], self.output_dim, device=noise.device)
+
+
+class _IdentityLatentDiscriminator(nn.Module):
+    def forward(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        validity = torch.zeros(features.shape[0], 1, device=features.device)
+        return validity, features
+
+
+def test_score_dataset_uses_mse_for_latent_adversarial_distance():
+    frame = pd.DataFrame(
+        {
+            "id": [1],
+            "f0": [1.0],
+            "f1": [0.5],
+            "anomaly": [0],
+        }
+    )
+    dataset = TabularAnomalyDataset(frame, ["f0", "f1"])
+    config = TrainConfig(
+        input_dim=2,
+        noise_dim=2,
+        batch_size=1,
+        score_samples=1,
+        device="cpu",
+    )
+
+    scores = score_dataset(dataset, _ZeroGenerator(output_dim=2), _IdentityLatentDiscriminator(), config)
+
+    assert np.allclose(scores, np.array([0.625]))
+
+
 def test_train_mensa_runs_one_epoch_and_scores_samples():
     frame = pd.DataFrame(
         {
@@ -89,32 +128,6 @@ def test_train_config_rejects_invalid_score_samples():
     )
 
     with pytest.raises(ValueError, match="score_samples"):
-        train_mensa(train_dataset=dataset, val_dataset=dataset, config=config)
-
-
-def test_train_config_rejects_invalid_score_alpha():
-    frame = pd.DataFrame(
-        {
-            "id": list(range(4)),
-            "f0": np.linspace(-0.1, 0.1, 4),
-            "f1": np.linspace(0.1, -0.1, 4),
-            "anomaly": [0] * 4,
-        }
-    )
-    dataset = TabularAnomalyDataset(frame, ["f0", "f1"])
-    config = TrainConfig(
-        input_dim=2,
-        noise_dim=10,
-        latent_dim=16,
-        batch_size=4,
-        epochs=1,
-        score_samples=2,
-        score_alpha=1.5,
-        device="cpu",
-        seed=123,
-    )
-
-    with pytest.raises(ValueError, match="score_alpha"):
         train_mensa(train_dataset=dataset, val_dataset=dataset, config=config)
 
 

@@ -2,7 +2,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from mensa_ad.data import TabularAnomalyDataset, load_labeled_frame, split_normal_train_val
+from mensa_ad.data import (
+    TabularAnomalyDataset,
+    append_train_anomalies_to_test,
+    load_labeled_frame,
+    split_normal_train_val,
+)
 
 
 def test_load_labeled_frame_validates_and_merges_labels(tmp_path):
@@ -57,6 +62,31 @@ def test_split_normal_train_val_removes_anomalies_from_weight_training(tmp_path)
     assert set(train_df["anomaly"].unique()) == {0}
     assert set(val_df["anomaly"].unique()) == {0}
     assert len(train_df) + len(val_df) == 3
+
+
+def test_append_train_anomalies_to_test_adds_every_training_anomaly():
+    train_frame = pd.DataFrame(
+        {
+            "id": [1, 2, 3, 4],
+            "f0": [0.0, 0.1, 0.2, 0.3],
+            "f1": [0.3, 0.2, 0.1, 0.0],
+            "anomaly": [0, 1, 0, 1],
+        }
+    )
+    test_frame = pd.DataFrame(
+        {
+            "id": [10, 11],
+            "f0": [-0.1, -0.2],
+            "f1": [0.1, 0.2],
+            "anomaly": [0, 1],
+        }
+    )
+
+    combined = append_train_anomalies_to_test(test_frame, train_frame)
+
+    assert combined["id"].tolist() == [10, 11, 2, 4]
+    assert combined["anomaly"].tolist() == [0, 1, 1, 1]
+    assert test_frame["id"].tolist() == [10, 11]
 
 
 def test_tabular_dataset_returns_float_features_and_int_labels(tmp_path):
